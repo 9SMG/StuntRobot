@@ -4,52 +4,115 @@ using UnityEngine.InputSystem;
 
 public class Player : MonoBehaviour, IMeleeActionable, IRangedActionable
 {
-    List<RobotAction> robotActions;
+    private List<RobotAction> _robotActions;
     private int _currRobotActionIdx;
     private int _maxRobotActionCnt;
 
     [Header("Movement")]
-    public float moveSpeed = 20f;
+    public float moveSpeed = 10f;
 
     [Header("Attack")]
-    GameObject attackEffectPrefab;
-    Transform attackPoint;
-    public float attackCooldown = 0.5f;
+    private GameObject _attackEffectPrefab;
+    private Transform _attackPoint;
+    public float AttackCooldown = 0.5f;
 
-    private Vector2 moveInput;
-    private Rigidbody2D rb;
+    private Vector2 _moveInput;
+    private Vector2 _lookInput;
+    private Rigidbody2D _rb;
 
     //private PlayerInputActions inputActions;
 
-    GameObject meleeWeapon;
-    GameObject RangeWeapon;
+    private GameObject _meleeWeapon;
+    private GameObject _RangeWeapon;
+    private GameObject _hand;
     
 
     private void Awake()
     {
-        rb = GetComponent<Rigidbody2D>();
+        _rb = GetComponent<Rigidbody2D>();
         
-        InputSystem.actions.FindAction("Move").performed += ctx => moveInput = ctx.ReadValue<Vector2>();
-        InputSystem.actions.FindAction("Move").canceled += ctx => moveInput = Vector2.zero;
+        InputSystem.actions.FindAction("Move").performed += ctx => _moveInput = ctx.ReadValue<Vector2>();
+        InputSystem.actions.FindAction("Move").canceled += ctx => _moveInput = Vector2.zero;
+
+        InputSystem.actions.FindAction("Look").performed += ctx => _lookInput = ctx.ReadValue<Vector2>();
+        InputSystem.actions.FindAction("Look").canceled += ctx => _lookInput = Vector2.zero;
 
         InputSystem.actions.FindAction("Attack").performed += ctx => TryAttack();
 
-        InitAction();
-
         _deltaAttackedTime = 0;
+
+        _hand = transform.GetChild(0).GetChild(0).gameObject;
+        _meleeWeapon = _hand.transform.GetChild(0).gameObject;
+        _RangeWeapon = _hand.transform.GetChild(1).gameObject;
     }
 
     private void Start()
     {
-        meleeWeapon = transform.GetChild(2).gameObject;
-        RangeWeapon = transform.GetChild(3).gameObject;
+        InitAction();
+    }
+
+    void InitAction()
+    {
+        if (_robotActions == null)
+        {
+            _robotActions = new List<RobotAction>();
+        }
+        else
+        {
+            _robotActions.Clear();
+        }
+
+        _robotActions.Add(new NormalMeleeAttackAction("Melee1"));
+        _robotActions.Add(new NormalRangedAttackAction("Ranged1"));
+        _robotActions.Add(new NormalMeleeAttackAction("Melee2"));
+        _robotActions.Add(new NormalMeleeAttackAction("Melee3"));
+        _robotActions.Add(new NormalRangedAttackAction("Ranged2"));
+
+        _maxRobotActionCnt = _robotActions.Count;
+        _currRobotActionIdx = 0;
+
+        _robotActions[_currRobotActionIdx].RobotActionable = this;
+        ReadyAction();
     }
 
     float _deltaAttackedTime;
     private void Update()
     {
         _deltaAttackedTime += Time.deltaTime;
+        Look();
     }
+
+    #region Player Look (Aim)
+    bool _isGamepad = false;
+    private void Look()
+    {
+        if (_isGamepad)
+        {
+            AimWithGamepad();
+        }
+        else
+        {
+            AimWithMouse();
+        }
+    }
+
+    void AimWithMouse()
+    {
+        Vector3 mouseWorldPos = Camera.main.ScreenToWorldPoint(Input.mousePosition);
+        Vector2 direction = mouseWorldPos - _hand.transform.position;
+        float angle = Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg;
+        _hand.transform.rotation = Quaternion.Euler(0, 0, angle);
+    }
+
+    void AimWithGamepad()
+    {
+        if (_lookInput.sqrMagnitude > 0.1f)
+        {
+            float angle = Mathf.Atan2(_lookInput.y, _lookInput.x) * Mathf.Rad2Deg;
+            _hand.transform.rotation = Quaternion.Euler(0, 0, angle);
+        }
+    }
+    #endregion
 
     private void FixedUpdate()
     {
@@ -58,12 +121,28 @@ public class Player : MonoBehaviour, IMeleeActionable, IRangedActionable
 
     private void Move()
     {
-        rb.linearVelocity = moveInput * moveSpeed;
+        _rb.linearVelocity = _moveInput * moveSpeed;
     }
 
+    void SwitchMeleeWeapon() => SwitchWeapon(0);
+    void SwitchRangedWeapon() => SwitchWeapon(1);
+    void SwitchWeapon(int weaponType)
+    {
+        switch (weaponType)
+        {
+            case 0:
+                _meleeWeapon.SetActive(true);
+                _RangeWeapon.SetActive(false);
+                break;
+            case 1:
+                _RangeWeapon.SetActive(true);
+                _meleeWeapon.SetActive(false);
+                break;
+        }
+    }
     private void TryAttack()
     {
-        if (_deltaAttackedTime < attackCooldown)
+        if (_deltaAttackedTime < AttackCooldown)
             return;
 
         _deltaAttackedTime = 0;
@@ -77,51 +156,38 @@ public class Player : MonoBehaviour, IMeleeActionable, IRangedActionable
         Debug.Log("Attack!");
     }
 
-    void InitAction()
-    {
-        if(robotActions == null)
-        {
-            robotActions = new List<RobotAction>();
-        }
-        else
-        {
-            robotActions.Clear();
-        }
-
-        ////Add
-        //for(int i = 0; i < 99; i++)
-        //{
-        //    robotActions.Add();
-        //}
-
-        robotActions.Add(new NormalMeleeAttackAction("Melee1"));
-        robotActions.Add(new NormalRangedAttackAction("Ranged1"));
-        robotActions.Add(new NormalMeleeAttackAction("Melee2"));
-        robotActions.Add(new NormalMeleeAttackAction("Melee3"));
-        robotActions.Add(new NormalRangedAttackAction("Ranged2"));
-
-        _maxRobotActionCnt = robotActions.Count;
-        _currRobotActionIdx = 0;
-
-        robotActions[_currRobotActionIdx].RobotActionable = this;
-    }
-
     void UseAction()
     {
-        if (robotActions.Count == 0)
+        if (_robotActions.Count == 0)
             return;
 
-        robotActions[_currRobotActionIdx].PlayAction();
+        _robotActions[_currRobotActionIdx].PlayAction();
         NextAction();
     }
 
     void NextAction()
     {
-        if (robotActions.Count == 0)
+        if (_robotActions.Count == 0)
             return;
 
         _currRobotActionIdx = (_currRobotActionIdx + 1) % _maxRobotActionCnt;
-        robotActions[_currRobotActionIdx].RobotActionable = this;
+        _robotActions[_currRobotActionIdx].RobotActionable = this;
+
+        ReadyAction();
+    }
+
+    void ReadyAction()
+    {
+        if (_robotActions[_currRobotActionIdx] is NormalMeleeAttackAction
+            || _robotActions[_currRobotActionIdx] is RarePowerMeleeAttackAction)
+        {
+            SwitchMeleeWeapon();
+        }
+        else if (_robotActions[_currRobotActionIdx] is NormalRangedAttackAction
+            || _robotActions[_currRobotActionIdx] is RarePowerRangedAttackAction)
+        {
+            SwitchRangedWeapon();
+        }
     }
 
     public void ReadyMeleeAttack()
@@ -131,7 +197,15 @@ public class Player : MonoBehaviour, IMeleeActionable, IRangedActionable
 
     public void MeleeAttack()
     {
-        Debug.Log("MeleeAttack()");
+        Debug.Log("Player.MeleeAttack()");
+        //GetComponentInChildren<IMeleeWeapon>().Attack();
+        _meleeWeapon.GetComponent<INormalMeleeAttack>()?.MeleeAttack();
+    }
+
+    public void PowerMeleeAttack()
+    {
+        Debug.Log("Player.PowerMeleeAttack()");
+        _meleeWeapon.GetComponent<IRarePowerMeleeAttack>()?.PowerMeleeAttack();
     }
 
     public void ReadRangedAttack()
@@ -142,23 +216,12 @@ public class Player : MonoBehaviour, IMeleeActionable, IRangedActionable
     public void RangedAttack()
     {
         Debug.Log("RangedAttack()");
+        _RangeWeapon.GetComponent<INormalRangedAttack>()?.RangedAttack();
     }
 
-    //public void MeleeAttack()
-    //{
-    //    Debug.Log("MeleeAttack()");
-    //    ///throw new System.NotImplementedException();
-    //}
-
-    //public void RangedAttack()
-    //{
-    //    Debug.Log("RangedAttack()");
-    //    //throw new System.NotImplementedException();
-    //}
-
-    //public void SpecialAttack()
-    //{
-    //    Debug.Log("SpecialAttack()");
-    //    //throw new System.NotImplementedException();
-    //}
+    public void PowerRangedAttack()
+    {
+        Debug.Log("Player.PowerRangedAttack()");
+        _RangeWeapon.GetComponent<IRareRangedAttack>()?.PowerRangedAttack();
+    }
 }

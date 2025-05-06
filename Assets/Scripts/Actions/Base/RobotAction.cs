@@ -35,7 +35,11 @@ public abstract class RobotAction
     protected Action OnReadyAction;
     protected Action OnFinishAction;
 
-    public void ReadyAction() { OnReadyAction?.Invoke(); IsReady = true; }
+    public virtual void ReadyAction() 
+    { 
+        OnReadyAction?.Invoke(); 
+        IsReady = true; 
+    }
     public abstract void PlayAction();
     public void FinishAction() { OnFinishAction?.Invoke(); IsFinished = true; }
 }
